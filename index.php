@@ -9,11 +9,12 @@ $p = $CFG->dbprefix;
 // 1. Handle Configuration Saving (Instructors Only)
 if ( $USER->instructor && isset($_POST['page_path']) ) {
     $PDOX->queryDie("INSERT INTO {$p}eo_learn_pages
-        (link_id, page_path, updated_at)
-        VALUES ( :LI, :PP, NOW() )
+        (link_id, page_path, user_id,updated_at)
+        VALUES ( :LI, :PP, :UID, NOW() )
         ON DUPLICATE KEY UPDATE page_path=:PP, updated_at = NOW()",
         array(
             ':LI' => $LINK->id,
+            ':UID' => $USER->id,
             ':PP' => $_POST["page_path"]
         )
     );
@@ -38,37 +39,70 @@ if ( $USER->instructor ) {
     echo("<h2>Grav Page Configuration</h2>");
     
     // Fetch pages from sitemap
-    $sitemapUrl = "https://learn.openochem.org/learn/sitemap.xml";
-    $pages = [];
-    try {
-        $xml = simplexml_load_file($sitemapUrl);
-        if ($xml) {
-            foreach ($xml->url as $urlItem) {
-                $pages[] = (string)$urlItem->loc;
+    //$sitemapUrl = "https://learn.openochem.org/learn/sitemap.xml";
+$sitemapUrl = "http://localhost/learn/sitemap"; 
+$pages = [];
+$seenUrls = []; // This is critical for filtering
+
+$doc = new DOMDocument();
+libxml_use_internal_errors(true);
+$html = file_get_contents($sitemapUrl);
+
+if ($html) {
+    $doc->loadHTML($html);
+    $links = $doc->getElementsByTagName('a');
+    
+    foreach ($links as $link) {
+        $url = trim($link->getAttribute('href'));
+        $title = trim($link->nodeValue);
+
+        // 1. Normalize the URL immediately
+        if (strpos($url, 'http') !== 0) {
+            $url = "http://localhost" . $url;
+        }
+
+        // 2. STICKY FILTERING
+        // Only include if /learn/ is in the URL 
+        // AND it's not just a jump link (hash)
+        // AND the title isn't a single character (like a '>' icon)
+        if (strpos($url, '/learn/') !== false && 
+            strpos($url, '#') === false && 
+            strlen($title) > 2) {
+
+            // 3. THE FINAL CHECK: If we haven't seen this EXACT URL yet
+            if (!isset($seenUrls[$url])) {
+                $pages[] = [
+                    'url' => $url,
+                    'title' => $title
+                ];
+                // Use the URL as a key for O(1) lookup speed
+                $seenUrls[$url] = true; 
             }
         }
-    } catch (Exception $e) {
-        echo("<p class='alert alert-danger'>Error loading sitemap.</p>");
     }
+}
+libxml_clear_errors();
+
+    //var_dump($pages);
 
     ?>
-    <div class="well">
-        <form method="post">
-            <label for="page_path">Select the Grav page to display to students:</label>
-            <select name="page_path" id="page_path" class="form-control">
-                <option value="">-- Select a Page --</option>
-                <?php foreach ($pages as $url): ?>
-                    <option value="<?= $url ?>" <?= ($currentPage == $url) ? 'selected' : '' ?>>
-                        <?= str_replace('https://learn.openochem.org/', '', $url) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <br/>
-            <input type="submit" class="btn btn-primary" value="Save Configuration">
-        </form>
-    </div>
-    <hr>
-    <h4>Preview:</h4>
+        <div class="well">  
+            <form method="post">
+                <label for="page_path">Select the Grav page to display to students:</label>
+                <select name="page_path" id="page_path" class="form-control">
+                    <option value="">-- Select a Page --</option>
+                    <?php foreach ($pages as $page): ?>
+                        <option value="<?= htmlspecialchars($page['url']) ?>" <?= ($currentPage == $page['url']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($page['title']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <br/>
+                <input type="submit" class="btn btn-primary" value="Save Configuration">
+            </form>
+        </div>
+        <hr>
+        <h4>Preview:</h4>
     <?php
 }
 

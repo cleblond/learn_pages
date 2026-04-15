@@ -31,6 +31,19 @@ $row = $PDOX->rowDie("SELECT page_path FROM {$p}eo_learn_pages
 $currentPage = $row ? $row['page_path'] : false;
 
 $OUTPUT->header();
+
+?>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+    /* Ensure the search box matches the Tsugi/Bootstrap style */
+    .select2-container .select2-selection--single {
+        height: 38px !important;
+        padding: 5px;
+    }
+</style>
+<?php
+
+
 $OUTPUT->bodyStart();
 $OUTPUT->flashMessages();
 
@@ -40,69 +53,67 @@ if ( $USER->instructor ) {
     
     // Fetch pages from sitemap
     //$sitemapUrl = "https://learn.openochem.org/learn/sitemap.xml";
-$sitemapUrl = "http://localhost/learn/sitemap"; 
-$pages = [];
-$seenUrls = []; // This is critical for filtering
+    $sitemapUrl = "https://learn.openochem.org/learn/sitemap"; 
+    $pages = [];
+    $seenUrls = []; // This is critical for filtering
 
-$doc = new DOMDocument();
-libxml_use_internal_errors(true);
-$html = file_get_contents($sitemapUrl);
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $html = file_get_contents($sitemapUrl);
 
-if ($html) {
-    $doc->loadHTML($html);
-    $links = $doc->getElementsByTagName('a');
-    
-    foreach ($links as $link) {
-        $url = trim($link->getAttribute('href'));
-        $title = trim($link->nodeValue);
+    if ($html) {
+        $doc->loadHTML($html);
+        $links = $doc->getElementsByTagName('a');
+        
+        foreach ($links as $link) {
+            $url = trim($link->getAttribute('href'));
+            $title = trim($link->nodeValue);
 
-        // 1. Normalize the URL immediately
-        if (strpos($url, 'http') !== 0) {
-            $url = "http://localhost" . $url;
-        }
+            // 1. Normalize the URL immediately
+            if (strpos($url, 'http') !== 0) {
+                $url = "https://learn.openochem.org" . $url;
+            }
 
-        // 2. STICKY FILTERING
-        // Only include if /learn/ is in the URL 
-        // AND it's not just a jump link (hash)
-        // AND the title isn't a single character (like a '>' icon)
-        if (strpos($url, '/learn/') !== false && 
-            strpos($url, '#') === false && 
-            strlen($title) > 2) {
+            // 2. STICKY FILTERING
+            // Only include if /learn/ is in the URL 
+            // AND it's not just a jump link (hash)
+            // AND the title isn't a single character (like a '>' icon)
+            if (strpos($url, '/learn/') !== false && 
+                strpos($url, '#') === false && 
+                strlen($title) > 2) {
 
-            // 3. THE FINAL CHECK: If we haven't seen this EXACT URL yet
-            if (!isset($seenUrls[$url])) {
-                $pages[] = [
-                    'url' => $url,
-                    'title' => $title
-                ];
-                // Use the URL as a key for O(1) lookup speed
-                $seenUrls[$url] = true; 
+                // 3. THE FINAL CHECK: If we haven't seen this EXACT URL yet
+                if (!isset($seenUrls[$url])) {
+                    $pages[] = [
+                        'url' => $url,
+                        'title' => $title
+                    ];
+                    // Use the URL as a key for O(1) lookup speed
+                    $seenUrls[$url] = true; 
+                }
             }
         }
     }
-}
-libxml_clear_errors();
+    libxml_clear_errors();
 
     //var_dump($pages);
 
     ?>
-        <div class="well">  
-            <form method="post">
-                <label for="page_path">Select the Grav page to display to students:</label>
-                <select name="page_path" id="page_path" class="form-control">
-                    <option value="">-- Select a Page --</option>
-                    <?php foreach ($pages as $page): ?>
-                        <option value="<?= htmlspecialchars($page['url']) ?>" <?= ($currentPage == $page['url']) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($page['title']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <br/>
-                <input type="submit" class="btn btn-primary" value="Save Configuration">
-            </form>
-        </div>
-        <hr>
-        <h4>Preview:</h4>
+    <div class="well">  
+        <form method="post">
+            <label for="page_path">Search for a Grav Page:</label>
+            <select name="page_path" id="grav-page-select" class="form-control">
+                <option value="">-- Start typing a chapter or topic... --</option>
+                <?php foreach ($pages as $page): ?>
+                    <option value="<?= htmlspecialchars($page['url']) ?>" <?= ($currentPage == $page['url']) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($page['title']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <br/>
+            <input type="submit" class="btn btn-primary" value="Save Configuration">
+        </form>
+    </div>
     <?php
 }
 
@@ -122,4 +133,17 @@ if ($currentPage) {
 }
 
 $OUTPUT->footerStart();
+?>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Initialize Select2 on our dropdown
+    $('#grav-page-select').select2({
+        placeholder: "Search for a page...",
+        allowClear: true,
+        width: '100%' // Ensure it fills the well
+    });
+});
+</script>
+<?php
 $OUTPUT->footerEnd();
